@@ -1,7 +1,6 @@
 mod db;
 use core::str;
-use std::{fs::read, io::{stdin, stdout}};
-
+use std::{fs::read, io::{stdin, stdout, Write}, thread::sleep, time};
 
 use db::{Service, User};
 
@@ -24,79 +23,121 @@ fn main() {
 
     let user = login_flow(&s);
 
-    let u = &user.username;
     start_user_flow(&user, &s);
-    println!("logged in {}!", u);
 }
 
 
 fn start_user_flow(user: &User, s: &Service) {
     print!("\x1B[2J\x1B[1;1H");
-    println!("Welcome, {}", user.username);
-    println!();
-    println!();
-    println!("Type \"help\" for a list of commands.");
-    take_user_input(&user, &s);
+    println!("Welcome, {}!", user.username);
+    sleep(time::Duration::from_secs(2));
+    take_user_input(&user, &s, String::new());
 }
 
-fn take_user_input(user: &User, s: &Service) {
+fn take_user_input(user: &User, s: &Service, returned_string: String) {
+    print!("\x1B[2J\x1B[1;1H");
+    println!("Type \"help\" for a list of commands.");
+    if returned_string.len() > 0 {
+        println!();
+        println!("{}", returned_string);
+    }
     let command = read_input();
     let _help = String::from("help");
     let _add = String::from("add");
     let _getall = String::from("getall");
     let _exit = String::from("exit");
+    let mut r = String::new();
     if command == _help {
-        println!("
-            add:        add a new password to your database
-            remove:     delete a password from your database
-            getall:     get a list of all stored password destinations
-            get:        get a password by its destination
-            exit:       exit the program
-        ");
-
+        r = String::from("
+    add:        Add a new password to your database
+    remove:     Delete a password from your database
+    getall:     Get a list of all stored password destinations
+    get:        Copy a password to clipboard by its id
+    exit:       Exit the program
+");
     }
+
+
     if command == _add {
+        print!("\x1B[2J\x1B[1;1H");
         println!("Enter destination for password:");
         println!();
         let destination = read_input();
 
+        print!("\x1B[2J\x1B[1;1H");
+        println!("Enter login username for password:");
+        println!();
+        let login_username = read_input();
+
+        print!("\x1B[2J\x1B[1;1H");
         println!("Enter password to save:");
         println!();
         let password = read_input();
+        write!(stdout(), "{}{}", termion::cursor::Up(1), termion::clear::AfterCursor);
 
-        let res = user.save_password(s, password, destination.clone());
+        let res = user.save_password(s, login_username, password, destination.clone());
         if res.is_ok() {
-            println!("Saved password for {}", destination.clone());
+            r = String::from(format!("Saved password for {}", destination));
         } else {
-            println!("Error saving password for {}", destination);
+            r = String::from(format!("Error saving password for {}, password already exists", destination));
         }
+        println!();
     }
+
+
     if command == _getall {
+        print!("\x1B[2J\x1B[1;1H");
         println!("Getting passwords...");
         println!();
         let passwords = user.get_passwords(s);
         for password in passwords {
             password.print();
+            println!();
+            let mut i = 0;
+            let s = termion::terminal_size().unwrap();
+            while i < s.0 {
+                print!("=");
+                i += 1;
+            }
+            print!("\n");
+            println!();
         }
+        println!("Press enter to return");
+        read_input();
     }
+
     if command == _exit {
         println!("Exiting...");
         return
     }
-    take_user_input(user, s);
+
+    if command.starts_with("get ") {
+        let id = command.split_at(4).1;
+        let c = user.copy_password(s, String::from(id));
+        if c.is_ok() {
+            println!("Copied to clipboard.");
+        } else {
+            println!("Password not found.");
+        }
+        sleep(time::Duration::from_secs(2));
+    }
+    take_user_input(user, s, r);
 }
 
 fn create_password(repeat: bool) -> String {
+
     if repeat {
-        println!("passwords do not match.. try again");
+        println!("Passwords do not match.. Try again");
     }
     println!();
     println!();
-    println!("enter password");
+    println!("Enter password");
+    println!();
     let mut p1 = termion::input::TermRead::read_passwd(&mut stdin(), &mut stdout()).unwrap().unwrap();
 
 
-    println!("repeat password");
+    println!("Repeat password");
+    println!();
     let p2 = termion::input::TermRead::read_passwd(&mut stdin(), &mut stdout()).unwrap().unwrap();
     if p1 != p2 {
         p1 = create_password(true)
@@ -110,11 +151,14 @@ fn create_password(repeat: bool) -> String {
 
 fn login_flow(s: &Service) -> User {
 
-    println!("enter username, or type \"create account\" to create an account");
+    println!("Enter username, or type \"create account\" to create an account");
     let username = read_input();
 
     if username == String::from("create account") {
-        println!("enter username");
+        print!("\x1B[2J\x1B[1;1H");
+        println!("Create account:");
+        println!();
+        println!("Enter username");
         let u = read_input();
 
         let p = create_password(false);
@@ -124,20 +168,23 @@ fn login_flow(s: &Service) -> User {
         if acc.is_ok() {
             return acc.unwrap()
         } else {
-            println!("user already exists");
+            print!("\x1B[2J\x1B[1;1H");
+            println!("User already exists");
+            sleep(time::Duration::from_secs(2));
+            print!("\x1B[2J\x1B[1;1H");
             return login_flow(s)
         }
     }
     println!();
 
-    println!("enter password");
+    println!("Enter password");
     let password = termion::input::TermRead::read_passwd(&mut stdin(), &mut stdout()).unwrap().unwrap();
 
     let acc = s.login(username, password);
     if acc.is_ok() {
         return acc.unwrap()
     } else {
-        println!("incorrect password, try again");
+        println!("Incorrect username or password, try again");
         return login_flow(s)
     }
 }
