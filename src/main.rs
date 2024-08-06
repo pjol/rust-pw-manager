@@ -13,7 +13,11 @@ use db::{Service, User};
 
 
 fn main() {
-    let path = String::from("~/.pjol_password_manager/data/pw.db");
+    let home_dir = String::from(std::env::home_dir().unwrap().to_str().unwrap());
+    let path = String::from(format!("{}/.pjol_password_manager/data/pw.db", home_dir.clone()));
+    let _d1 = std::fs::create_dir(format!("{}/.pjol_password_manager", home_dir.clone()));
+    let _d2 = std::fs::create_dir(format!("{}/.pjol_password_manager/data", home_dir.clone()));
+    println!("{}", path);
     let s = db::connect(path.clone());
 
 

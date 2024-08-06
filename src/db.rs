@@ -333,8 +333,6 @@ pub fn connect(path: String) -> Service {
   let exists = Path::new(&path).exists();
   println!("exists: {}", exists);
   if !exists {
-    let _d1 = std::fs::create_dir("~/.pjol_password_manager");
-    let _d2 = std::fs::create_dir("~/.pjol_password_manager/data");
     let f = File::create_new(&path);
     if !f.is_ok() {
       panic!("unable to make db file, please make sure the directory ./data is available at the root of the project.")
