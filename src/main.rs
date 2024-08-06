@@ -13,7 +13,7 @@ use db::{Service, User};
 
 
 fn main() {
-    let path = String::from("./data/pw.db");
+    let path = String::from("~/.pjol_password_manager/data/pw.db");
     let s = db::connect(path.clone());
 
 
@@ -44,16 +44,19 @@ fn take_user_input(user: &User, s: &Service, returned_string: String) {
     let command = read_input();
     let _help = String::from("help");
     let _add = String::from("add");
+    let _remove = String::from("remove");
     let _getall = String::from("getall");
+    let _search = String::from("search");
     let _exit = String::from("exit");
     let mut r = String::new();
     if command == _help {
         r = String::from("
-    add:        Add a new password to your database
-    remove:     Delete a password from your database
-    getall:     Get a list of all stored password destinations
-    get:        Copy a password to clipboard by its id
-    exit:       Exit the program
+    add:             Add a new password to your database
+    remove:          Delete a password from your database
+    getall:          Get a list of all stored password destinations
+    search [str]:    Search password destinations
+    get [id]:        Copy a password to clipboard by its id
+    exit:            Exit the program
 ");
     }
 
@@ -73,7 +76,7 @@ fn take_user_input(user: &User, s: &Service, returned_string: String) {
         println!("Enter password to save:");
         println!();
         let password = read_input();
-        write!(stdout(), "{}{}", termion::cursor::Up(1), termion::clear::AfterCursor);
+        write!(stdout(), "{}{}", termion::cursor::Up(1), termion::clear::AfterCursor).unwrap();
 
         let res = user.save_password(s, login_username, password, destination.clone());
         if res.is_ok() {
@@ -84,6 +87,27 @@ fn take_user_input(user: &User, s: &Service, returned_string: String) {
         println!();
     }
 
+    if command == _remove {
+        print!("\x1B[2J\x1B[1;1H");
+        println!("Enter account password.");
+        println!();
+        let pw = termion::input::TermRead::read_passwd(&mut stdin(), &mut stdout()).unwrap().unwrap();
+
+        print!("\x1B[2J\x1B[1;1H");
+        println!("Enter password id to delete.");
+        println!();
+        let id = read_input();
+
+        let ok = user.remove_password(s, id.clone(), pw).is_ok();
+
+        if ok {
+            println!("Password {} deleted.", id);
+        } else {
+            println!("Error deleting password {}.", id);
+        }
+
+        sleep(time::Duration::from_secs(2));
+    }
 
     if command == _getall {
         print!("\x1B[2J\x1B[1;1H");
@@ -106,13 +130,44 @@ fn take_user_input(user: &User, s: &Service, returned_string: String) {
         read_input();
     }
 
+    if command.starts_with("search ") {
+        println!("Searching passwords...");
+        println!();
+        let size = termion::terminal_size().unwrap();
+        print!("\x1B[2J\x1B[1;1H");
+        let mut search = command.split_at(6).1;
+
+        while &search[0..1] == " " {
+            search = &search[1..search.len()]
+        }
+
+        println!("Searching passwords...");
+        println!();
+        let passwords = user.search_passwords(s, String::from(search));
+        for password in passwords {
+            password.print();
+            println!();
+            let mut i = 0;
+            while i < size.0 {
+                print!("=");
+                i += 1;
+            }
+            print!("\n");
+            println!();
+        }
+        println!("Press enter to return");
+        read_input();
+
+    }
+
     if command == _exit {
         println!("Exiting...");
         return
     }
 
     if command.starts_with("get ") {
-        let id = command.split_at(4).1;
+        let formatted = command.replace(" ", "");
+        let id = formatted.split_at(3).1;
         let c = user.copy_password(s, String::from(id));
         if c.is_ok() {
             println!("Copied to clipboard.");

@@ -21,7 +21,6 @@ pub fn u8_to_string(bytes: &[u8]) -> String {
   for &byte in bytes {
     write!(&mut s, "{:X}", byte).expect("Unable to write bytes to string")
   }
-
   s
 }
 
@@ -44,7 +43,6 @@ pub fn encrypt_secret(password: String) -> Vec<u8> {
   let key = aes_gcm::Aes256Gcm::generate_key(aes_gcm::aead::OsRng);
   let key_bytes: &[u8] = key.as_slice().try_into().unwrap();
 
-
   let password_bytes: &[u8; 32] = &generate_key_from_string(password);
   let cipher = aes_gcm::Aes256Gcm::new(password_bytes.into());
 
@@ -60,7 +58,6 @@ pub fn encrypt_secret(password: String) -> Vec<u8> {
 pub fn encrypt(key: Vec<u8>, message: String) -> Vec<u8> {
   let k = sha2::digest::generic_array::GenericArray::clone_from_slice(&key);
   let cipher = aes_gcm::Aes256Gcm::new(&k);
-
 
   let nonce: sha2::digest::generic_array::GenericArray<u8, _> = aes_gcm::Nonce::from_iter(key.clone());
 
@@ -93,7 +90,6 @@ pub fn decrypt(password: String, encrypted: &[u8]) -> Result<Vec<u8>, aes_gcm::E
   let nonce: sha2::digest::generic_array::GenericArray<u8, _> = aes_gcm::Nonce::from_iter(*password_bytes);
 
   let decrypted_secret: Result<Vec<u8>, aes_gcm::Error> = cipher.decrypt(&nonce, encrypted);
-
 
   decrypted_secret
 }

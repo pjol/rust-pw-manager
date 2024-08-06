@@ -92,6 +92,39 @@ impl User {
     }
   }
 
+  pub fn remove_password(&self, s: &Service, id: String, password: String) -> Result<&str, &str> {
+
+    let username = self.username.clone();
+
+    let u = s.login(username, password);
+
+    if !u.is_ok() {
+      return Err("unauthorized");
+    }
+
+    if u.unwrap().secret != self.secret {
+      return Err("unauthorized");
+    }
+
+    let delete_password_query = "
+      DELETE FROM passwords WHERE id = :id;
+    ";
+
+    let mut statement = s.db.prepare(delete_password_query).unwrap();
+    statement.bind::<&[(_, Value)]>(&[
+      (":id", id.clone().into()),
+    ]).unwrap();
+
+    let ok = statement.next().is_ok();
+
+    if !ok {
+      return Err("error deleting password")
+    } else {
+      return Ok("deleted")
+    }
+
+  }
+
   pub fn get_passwords(&self, s: &Service) -> Vec<Password>{
 
     let get_passwords_query = "
@@ -122,8 +155,35 @@ impl User {
     pws
   }
 
-  pub fn search_passwords(&self, s: &Service, search: String) -> Password {
-    return Password::new(String::from("t"), String::from("t"), String::from("t"), String::from("t"), String::from("t"));
+  pub fn search_passwords(&self, s: &Service, search: String) -> Vec<Password> {
+    let search_passwords_query = "
+      SELECT * FROM passwords WHERE destination LIKE :search;
+    ";
+
+    let formatted_search = format!("%{}%", search);
+
+    let mut statement = s.db.prepare(search_passwords_query).unwrap();
+    statement.bind::<&[(_, Value)]>(&[
+      (":search", formatted_search.clone().into()),
+    ]).unwrap();
+
+    let mut pws:Vec<Password> = Vec::new();
+
+    while let Ok(State::Row) = statement.next() {
+      let i = statement.read::<String, _>("id").unwrap();
+      let u = statement.read::<String, _>("owner_username").unwrap();
+      let l = statement.read::<String, _>("login_username").unwrap();
+      let d = statement.read::<String, _>("destination").unwrap();
+      let p = statement.read::<Vec<u8>, _>("encrypted_password").unwrap();
+
+      let decrypted_password = auth::decrypt_password(&self.secret, &p);
+
+      if decrypted_password.is_ok() {
+        pws.push(Password::new(i, u, l, d, decrypted_password.unwrap()))
+      }
+    }
+
+    pws
   }
 
   pub fn copy_password(&self, s: &Service, id: String) -> Result<String, String> {
@@ -169,7 +229,6 @@ impl Service {
 
 
   pub fn login(&self, username: String, password: String) -> Result<User, &str> {
-    println!("Logging in...");
     let pw_hash = derive_pw(password.clone());
 
     let get_user = "
@@ -274,6 +333,8 @@ pub fn connect(path: String) -> Service {
   let exists = Path::new(&path).exists();
   println!("exists: {}", exists);
   if !exists {
+    let _d1 = std::fs::create_dir("~/.pjol_password_manager");
+    let _d2 = std::fs::create_dir("~/.pjol_password_manager/data");
     let f = File::create_new(&path);
     if !f.is_ok() {
       panic!("unable to make db file, please make sure the directory ./data is available at the root of the project.")
